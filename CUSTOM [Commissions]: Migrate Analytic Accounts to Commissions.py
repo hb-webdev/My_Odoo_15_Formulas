@@ -1,3 +1,5 @@
+# SERVER ACTION
+
 # Available variables:
 #  - env: Odoo Environment on which the action is triggered
 #  - model: Odoo Model of the record on which the action is triggered; is a void recordset
