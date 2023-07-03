@@ -1,4 +1,5 @@
-# Model: Analytic Account\
+# AUTOMATED ACTION
+# Model: Analytic Account
 # Trigger: On Creation
 
 # Available variables:
