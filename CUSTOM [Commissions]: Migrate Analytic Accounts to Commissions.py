@@ -1,4 +1,4 @@
-# SERVER ACTION
+# SERVER ACTION (To be manually run when you need to create Commissions entries for all existing Analytic Account entries)
 
 # Available variables:
 #  - env: Odoo Environment on which the action is triggered
