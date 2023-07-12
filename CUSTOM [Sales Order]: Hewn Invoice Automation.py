@@ -1,7 +1,3 @@
-# AUTOMATED ACTION
-# Model: Sales Order
-# Trigger: On Creation & Update
-
 # Available variables:
 #  - env: Odoo Environment on which the action is triggered
 #  - model: Odoo Model of the record on which the action is triggered; is a void recordset
@@ -25,6 +21,7 @@ def check_requirements(record):
   checklist_results = []
   payment_id = -1
   is_valid = True
+  zero_total = False
 
   # 1. Check the company
   if record.sudo().company_id.id == 3: #Hewn's ID
@@ -74,29 +71,33 @@ def check_requirements(record):
     is_valid = False
 
   # 5. Check the Payment confirmation
-  payment_confirmed = False
-  for message in record.sudo().message_ids:
-    if 'The transaction with reference' in message.body and 'has been confirmed' in message.body:
-      # 5a. Extract the Payment ID from the Note
-      start_position = message.body.find('data-oe-id="')
-      if start_position != -1:
-        start_position += len('data-oe-id="')
-        end_position = message.body.find('"', start_position)
-        if end_position != -1:
-          payment_id = int(message.body[start_position:end_position])
-      if payment_id != -1:
-        payment_confirmed = True
-        break
-  if payment_confirmed:
-    checklist_results.append('Payment confirmation Check - Passed')
+  if record.sudo().amount_total == 0:
+    zero_total = True
+    checklist_results.append('Payment confirmation Check - Passed ($0.00 Total)')
   else:
-    checklist_results.append('Payment confirmation Check - Failed')
-    is_valid = False
+    payment_confirmed = False
+    for message in record.sudo().message_ids:
+      if 'The transaction with reference' in message.body and 'has been confirmed' in message.body:
+        # 5a. Extract the Payment ID from the Note
+        start_position = message.body.find('data-oe-id="')
+        if start_position != -1:
+          start_position += len('data-oe-id="')
+          end_position = message.body.find('"', start_position)
+          if end_position != -1:
+            payment_id = int(message.body[start_position:end_position])
+        if payment_id != -1:
+          payment_confirmed = True
+          break
+    if payment_confirmed:
+      checklist_results.append('Payment confirmation Check - Passed')
+    else:
+      checklist_results.append('Payment confirmation Check - Failed')
+      is_valid = False
 
-  return is_valid, checklist_results, payment_id
+  return is_valid, checklist_results, payment_id, zero_total
 
 if not env.context.get('automatic_update'):
-  is_valid, checklist_results, payment_id = check_requirements(record)
+  is_valid, checklist_results, payment_id, zero_total = check_requirements(record)
   log_checklist_results(checklist_results, is_valid)
   
   if is_valid:
@@ -124,29 +125,32 @@ if not env.context.get('automatic_update'):
       record.sudo().write({
         'invoice_ids': [(4, invoice.id, None)]
       })
-      message = "<p><i>(Automated)</i></p><p>This journal entry has been created from: <a href='#' data-oe-model='sale.order' data-oe-id='" + str(record.id) + "'> " + str(record.name) + "</a></p>"
-      invoice.sudo().message_post(body=message, subtype_xmlid="mail.mt_note")  # You can change the subtype_xmlid as needed.
+      invoice_message = "<p><i>(Automated)</i></p><p>This journal entry has been created from: <a href='#id=" + str(record.id) + "&model=sale.order' target='_blank'><b>" + str(record.name) + "</b></a></p>"
+      invoice.sudo().message_post(body=invoice_message, subtype_xmlid="mail.mt_note")  # You can change the subtype_xmlid as needed.
+      sales_order_message = "<p><i>(Automated)</i></p><p>Invoice Created: <a href='#id=" + str(invoice.id) + "&model=account.move' target='_blank'><b>" + str(invoice.name) + "</b></a></p>"
+      record.sudo().message_post(body=sales_order_message, subtype_xmlid="mail.mt_note")
       log('Invoice created and confirmed for order id ' + str(record.id))
     
-      # 2. Create the Payment Transaction
-      payment_transaction_obj = record.sudo().env['payment.transaction']
-      transaction_reference = record.name + "_" + str(invoice.id)
-      payment_transaction = env['payment.transaction'].sudo().search([('payment_id', '=', payment_id)], limit=1)
-      acquirer = payment_transaction.acquirer_id if payment_transaction else False
-      transaction_values = {
-        'amount': invoice.amount_total,
-        'currency_id': invoice.currency_id.id,
-        'partner_id': invoice.partner_id.id,
-        'acquirer_id': acquirer.id,
-        'reference': transaction_reference,
-        'payment_id': payment_id,
-        'sale_order_ids': [(4, record.id, 0)],
-      }
-      transaction = payment_transaction_obj.sudo().create(transaction_values)
-      # Link the payment.transaction to the invoice
-      invoice.sudo().write({
-        'transaction_ids': [(4, transaction.id, 0)]
-      })
+      if not zero_total:
+        # 2. Create the Payment Transaction
+        payment_transaction_obj = record.sudo().env['payment.transaction']
+        transaction_reference = record.name + "_" + str(invoice.id)
+        payment_transaction = env['payment.transaction'].sudo().search([('payment_id', '=', payment_id)], limit=1)
+        acquirer = payment_transaction.acquirer_id if payment_transaction else False
+        transaction_values = {
+          'amount': invoice.amount_total,
+          'currency_id': invoice.currency_id.id,
+          'partner_id': invoice.partner_id.id,
+          'acquirer_id': acquirer.id,
+          'reference': transaction_reference,
+          'payment_id': payment_id,
+          'sale_order_ids': [(4, record.id, 0)],
+        }
+        transaction = payment_transaction_obj.sudo().create(transaction_values)
+        # Link the payment.transaction to the invoice
+        invoice.sudo().write({
+          'transaction_ids': [(4, transaction.id, 0)]
+        })
       
       # 3. Reconcile the payment with the invoice
       # Get all the payment move lines linked to the sales order with a positive credit amount
