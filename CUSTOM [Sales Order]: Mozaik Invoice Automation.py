@@ -1,7 +1,3 @@
-# AUTOMATED ACTION
-# Model: Sales Order
-# Trigger: On Creation & Update
-
 # Available variables:
 #  - env: Odoo Environment on which the action is triggered
 #  - model: Odoo Model of the record on which the action is triggered; is a void recordset
@@ -104,14 +100,16 @@ if not env.context.get('automatic_update'):
       record.sudo().write({
         'invoice_ids': [(4, invoice.id, None)]
       })
-      message = "<p><i>(Automated)</i></p><p>This journal entry has been created from: <a href='#' data-oe-model='sale.order' data-oe-id='" + str(record.id) + "'> " + str(record.name) + "</a></p>"
-      invoice.sudo().message_post(body=message, subtype_xmlid="mail.mt_note")  # You can change the subtype_xmlid as needed.
+      invoice_message = "<p><i>(Automated)</i></p><p>This journal entry has been created from: <a href='#id=" + str(record.id) + "&model=sale.order' target='_blank'><b>" + str(record.name) + "</b></a></p>"
+      invoice.sudo().message_post(body=invoice_message, subtype_xmlid="mail.mt_note")  # You can change the subtype_xmlid as needed.
+      sales_order_message = "<p><i>(Automated)</i></p><p>Invoice Created: <a href='#id=" + str(invoice.id) + "&model=account.move' target='_blank'><b>" + str(invoice.name) + "</b></a></p>"
+      record.sudo().message_post(body=sales_order_message, subtype_xmlid="mail.mt_note")
       log('Invoice created and confirmed for order id ' + str(record.id))
     
       # 2. Email the invoice
-      template = env.ref('account.email_template_edi_invoice', raise_if_not_found=False)
-      if template and invoice:
-        invoice.sudo().message_post_with_template(template.id)
-        log('Invoice email sent for invoice id ' + str(invoice.id))
+      # template = env.ref('account.email_template_edi_invoice', raise_if_not_found=False)
+      # if template and invoice:
+      #   invoice.sudo().message_post_with_template(template.id)
+      #   log('Invoice email sent for invoice id ' + str(invoice.id))
   
   log('******** END AUTO-INVOICE LOG ********')
