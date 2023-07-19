@@ -65,6 +65,10 @@ def check_requirements(record):
       else:
         checklist_results.append('Line Item Delivered Check - Skipped Delivery\Discount in "' + str(line.name) + '"')
   if all_line_items_valid:
+    if record.sudo().amount_total == 0:
+      record.sudo().write({
+        'order_line': [(1, line.id, {'qty_delivered': line.qty_delivered}) for line in record.order_line]
+      })
     checklist_results.append('Cumulative Line Item Delivered Check - Passed')
   else:
     checklist_results.append('Cumulative Line Item Delivered Check - Failed')
